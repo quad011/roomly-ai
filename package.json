@@ -1,0 +1,26 @@
+{
+  "name": "roomly-ai",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@huggingface/inference": "^4.13.28",
+    "@tailwindcss/postcss": "^4.3.3",
+    "lucide-react": "^0.468.0",
+    "next": "^15.1.0",
+    "openai": "^7.9.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.7.2"
+  }
+}
