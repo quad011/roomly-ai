@@ -11,10 +11,21 @@ export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+
   const [verificationStep, setVerificationStep] = useState(false);
   const [error, setError] = useState("");
 
   const loading = fetchStatus === "fetching";
+
+  const getErrorMessage = (err: any, fallback: string) => {
+    return (
+      err?.errors?.[0]?.longMessage ||
+      err?.errors?.[0]?.message ||
+      err?.longMessage ||
+      err?.message ||
+      fallback
+    );
+  };
 
   const handleSignUp = async () => {
     if (!name.trim() || !email.trim() || !password) {
@@ -30,14 +41,14 @@ export default function SignUpPage() {
     setError("");
 
     try {
-      // Create signup with email + password
-      // Name is added later using signUp.update()
+      // Create signup with email + password.
+      // Name is added later using signUp.update().
       await signUp.create({
         emailAddress: email.trim(),
         password,
       });
 
-      // Send email verification code
+      // Send email verification code.
       const { error: verificationError } =
         await signUp.verifications.sendEmailCode();
 
@@ -63,9 +74,10 @@ export default function SignUpPage() {
       console.error("========================================");
 
       setError(
-        err?.errors?.[0]?.longMessage ||
-          err?.errors?.[0]?.message ||
+        getErrorMessage(
+          err,
           "Unable to create your account."
+        )
       );
     }
   };
@@ -79,7 +91,7 @@ export default function SignUpPage() {
     setError("");
 
     try {
-      // Verify email
+      // Verify email.
       const { error: verificationError } =
         await signUp.verifications.verifyEmailCode({
           code: code.trim(),
@@ -94,39 +106,47 @@ export default function SignUpPage() {
         return;
       }
 
-      // Split full name into first and last name
+      // Split full name into first and last name.
       const nameParts = name.trim().split(/\s+/);
 
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
 
-      // Save name to Clerk
+      // Save name to Clerk.
       await signUp.update({
         firstName,
         lastName,
       });
 
-      // Finalize signup
+      // Finalize signup.
       await signUp.finalize({
         navigate: () => {
           window.location.href = "/";
         },
       });
     } catch (err: any) {
-      console.error("========== CLERK VERIFICATION ERROR ==========");
+      console.error(
+        "========== CLERK VERIFICATION ERROR =========="
+      );
       console.error("FULL ERROR:", err);
       console.error("ERRORS:", err?.errors);
       console.error("FIRST ERROR:", err?.errors?.[0]);
       console.error("CODE:", err?.errors?.[0]?.code);
       console.error("MESSAGE:", err?.errors?.[0]?.message);
-      console.error("LONG MESSAGE:", err?.errors?.[0]?.longMessage);
+      console.error(
+        "LONG MESSAGE:",
+        err?.errors?.[0]?.longMessage
+      );
       console.error("META:", err?.errors?.[0]?.meta);
-      console.error("================================================");
+      console.error(
+        "================================================"
+      );
 
       setError(
-        err?.errors?.[0]?.longMessage ||
-          err?.errors?.[0]?.message ||
+        getErrorMessage(
+          err,
           "Unable to complete your account."
+        )
       );
     }
   };
@@ -135,18 +155,19 @@ export default function SignUpPage() {
     setError("");
 
     try {
-      await signUp.authenticateWithRedirect({
+      await signUp.sso({
         strategy: "oauth_google",
-        redirectUrl: "/sign-in/sso-callback",
-        redirectUrlComplete: "/",
+        redirectCallbackUrl: "/sign-in/sso-callback",
+        redirectUrl: "/",
       });
     } catch (err: any) {
       console.error("CLERK GOOGLE ERROR:", err);
 
       setError(
-        err?.errors?.[0]?.longMessage ||
-          err?.errors?.[0]?.message ||
+        getErrorMessage(
+          err,
           "Unable to continue with Google."
+        )
       );
     }
   };
@@ -175,8 +196,9 @@ export default function SignUpPage() {
               </h1>
 
               <p className="mt-6 text-lg leading-8 text-zinc-400">
-                Upload a photo of your room and transform it into a beautiful
-                new space with AI-powered interior design.
+                Upload a photo of your room and transform it
+                into a beautiful new space with AI-powered
+                interior design.
               </p>
             </div>
           </div>
@@ -212,7 +234,8 @@ export default function SignUpPage() {
                     </h2>
 
                     <p className="mt-2 text-sm text-zinc-500">
-                      Start creating beautiful room designs with AI.
+                      Start creating beautiful room designs
+                      with AI.
                     </p>
                   </div>
 
@@ -261,7 +284,9 @@ export default function SignUpPage() {
                       id="name"
                       type="text"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) =>
+                        setName(e.target.value)
+                      }
                       placeholder="John Doe"
                       autoComplete="name"
                       className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/5"
@@ -281,7 +306,9 @@ export default function SignUpPage() {
                       id="email"
                       type="email"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) =>
+                        setEmail(e.target.value)
+                      }
                       placeholder="you@example.com"
                       autoComplete="email"
                       className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/5"
@@ -301,7 +328,9 @@ export default function SignUpPage() {
                       id="password"
                       type="password"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) =>
+                        setPassword(e.target.value)
+                      }
                       placeholder="••••••••••••••••"
                       autoComplete="new-password"
                       className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/5"
@@ -382,7 +411,9 @@ export default function SignUpPage() {
                     type="text"
                     inputMode="numeric"
                     value={code}
-                    onChange={(e) => setCode(e.target.value)}
+                    onChange={(e) =>
+                      setCode(e.target.value)
+                    }
                     placeholder="123456"
                     autoComplete="one-time-code"
                     className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-center text-lg tracking-[0.3em] outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/5"
@@ -395,7 +426,9 @@ export default function SignUpPage() {
                     disabled={loading}
                     className="mt-6 w-full rounded-xl bg-zinc-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {loading ? "Verifying..." : "Verify email"}
+                    {loading
+                      ? "Verifying..."
+                      : "Verify email"}
                   </button>
                 </>
               )}
@@ -403,11 +436,13 @@ export default function SignUpPage() {
 
             {/* TERMS */}
             <p className="mt-6 text-center text-xs leading-5 text-zinc-400">
-              By creating an account, you agree to Roomly AI&apos;s{" "}
+              By creating an account, you agree to Roomly
+              AI&apos;s{" "}
 
               <span className="text-zinc-500">
                 Terms of Service
               </span>{" "}
+
               and{" "}
 
               <span className="text-zinc-500">
