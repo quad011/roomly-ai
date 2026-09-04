@@ -1,5 +1,32 @@
 {
-  "node": {},
+  "node": {
+    "7f421a188b62757ef2a7d916c60740cbf46b013594": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fdarko%2FDesktop%2Fcvele%2Froomly-ai%2Fnode_modules%2F%40clerk%2Fnextjs%2Fdist%2Fesm%2Fapp-router%2Fkeyless-actions.js%22%2C%5B%7B%22id%22%3A%227f421a188b62757ef2a7d916c60740cbf46b013594%22%2C%22exportedName%22%3A%22deleteKeylessAction%22%2C%22filename%22%3A%22node_modules%2F%40clerk%2Fnextjs%2Fdist%2Fesm%2Fapp-router%2Fkeyless-actions.js%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/page": "rsc"
+      },
+      "filename": "node_modules/@clerk/nextjs/dist/esm/app-router/keyless-actions.js",
+      "exportedName": "deleteKeylessAction"
+    },
+    "7f48900db251e9b295e7cbba048097827c0f6cd233": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fdarko%2FDesktop%2Fcvele%2Froomly-ai%2Fnode_modules%2F%40clerk%2Fnextjs%2Fdist%2Fesm%2Fapp-router%2Fserver-actions.js%22%2C%5B%7B%22id%22%3A%227f48900db251e9b295e7cbba048097827c0f6cd233%22%2C%22exportedName%22%3A%22invalidateCacheAction%22%2C%22filename%22%3A%22node_modules%2F%40clerk%2Fnextjs%2Fdist%2Fesm%2Fapp-router%2Fserver-actions.js%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/page": "action-browser"
+      },
+      "filename": "node_modules/@clerk/nextjs/dist/esm/app-router/server-actions.js",
+      "exportedName": "invalidateCacheAction"
+    }
+  },
   "edge": {},
   "encryptionKey": "lvy/g/Ufw07xbm3R8PiUbGuiuTQ9Y4W+txR2i56KJJw="
 }

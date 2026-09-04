@@ -8,11 +8,14 @@
     "start": "next start"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.9.0",
     "@huggingface/inference": "^4.13.28",
+    "@prisma/client": "^6.19.3",
     "@tailwindcss/postcss": "^4.3.3",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "openai": "^7.9.0",
+    "prisma": "^6.19.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.3.3"

@@ -1,6 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { useAuth } from "@clerk/nextjs";
+
 import {
   Download,
   ImagePlus,
@@ -8,73 +15,232 @@ import {
   Sparkles,
   Upload,
   WandSparkles,
+  ChevronDown,
 } from "lucide-react";
-import { styles } from "@/lib/demo";
-import { ChevronDown } from "lucide-react";
+
+import {
+  styles,
+  exteriorStyles,
+} from "@/lib/demo";
+
+import {
+  PLAN_LIMITS,
+  type Plan,
+} from "@/lib/plans";
+
+import AuthButton from "@/components/AuthButton";
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const {
+    isLoaded,
+    isSignedIn,
+  } = useAuth();
+
   // =========================================================
-  // PLAN
+  // PLAN / USAGE
   // =========================================================
 
-  // TESTING:
-  // "free"      = 5 generations + 3 styles
-  // "pro"       = 100 generations + 10 styles
-  // "unlimited" = unlimited generations + all styles
-  //
-  // Kasnije ćemo ovo zameniti pravim user/subscription podatkom.
-  const [currentPlan] = useState<"free" | "pro" | "unlimited">("unlimited");
+  const [currentPlan, setCurrentPlan] =
+    useState<Plan>("free");
 
-  const planLimits = {
-    free: {
-      generations: 5,
-      designs: 3,
-    },
-    pro: {
-      generations: 100,
-      designs: 10,
-    },
-    unlimited: {
-      generations: Infinity,
-      designs: Infinity,
-    },
-  };
+  const [remaining, setRemaining] =
+    useState<number | null>(
+      PLAN_LIMITS.free.generations
+    );
 
-  const currentLimits = planLimits[currentPlan];
+  const [usageLoaded, setUsageLoaded] =
+    useState(false);
+
+  const [isAdminUser, setIsAdminUser] =
+    useState(false);
+
+  const currentLimits =
+    PLAN_LIMITS[currentPlan];
+
+  // =========================================================
+  // LOAD REAL DATABASE USAGE
+  // =========================================================
+
+  useEffect(() => {
+    if (!isLoaded) {
+      return;
+    }
+
+    if (!isSignedIn) {
+      setCurrentPlan("free");
+      setRemaining(
+        PLAN_LIMITS.free.generations
+      );
+      setIsAdminUser(false);
+      setUsageLoaded(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadUsage() {
+      try {
+        setUsageLoaded(false);
+
+        const response = await fetch(
+          "/api/user/usage",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              "Failed to load account usage."
+          );
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        const plan: Plan =
+          data.plan === "basic" ||
+          data.plan === "pro"
+            ? data.plan
+            : "free";
+
+        setCurrentPlan(plan);
+
+        setIsAdminUser(
+          Boolean(data.isAdmin)
+        );
+
+        if (
+          data.remaining === null ||
+          typeof data.remaining === "undefined"
+        ) {
+          setRemaining(null);
+        } else {
+          setRemaining(
+            Math.max(
+              Number(data.remaining) || 0,
+              0
+            )
+          );
+        }
+
+        setUsageLoaded(true);
+      } catch (error) {
+        console.error(
+          "Failed to load usage:",
+          error
+        );
+
+        if (!cancelled) {
+          setUsageLoaded(false);
+        }
+      }
+    }
+
+    loadUsage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isSignedIn]);
 
   // =========================================================
   // GENERATOR STATE
   // =========================================================
 
-  const [selected, setSelected] = useState(
-    styles[0]?.id ?? "modern"
-  );
+  const [selected, setSelected] =
+    useState(
+      styles[0]?.id ?? "modern"
+    );
 
-  const [room, setRoom] = useState("Living Room");
+  const [spaceType, setSpaceType] =
+    useState<
+      "interior" | "exterior"
+    >("interior");
 
-  const [preserve, setPreserve] = useState(
-    "Layout + windows + doors"
-  );
+  const [room, setRoom] =
+    useState("Living Room");
 
-  const [creativity, setCreativity] = useState("Balanced");
+  const [preserve, setPreserve] =
+    useState(
+      "Layout + windows + doors"
+    );
 
-  const [additionalPrompt, setAdditionalPrompt] = useState("");
+  const [creativity, setCreativity] =
+    useState("Balanced");
 
-  const [file, setFile] = useState<File | null>(null);
+  const [
+    additionalPrompt,
+    setAdditionalPrompt,
+  ] = useState("");
 
-  const [preview, setPreview] = useState<string | null>(null);
+  const [file, setFile] =
+    useState<File | null>(null);
 
-  const [remaining, setRemaining] = useState(
-    currentLimits.generations
-  );
+  const [preview, setPreview] =
+    useState<string | null>(null);
 
-  const [results, setResults] = useState<string[]>([]);
+  const [results, setResults] =
+    useState<string[]>([]);
 
-  const [generating, setGenerating] = useState(false);
+  const [generating, setGenerating] =
+    useState(false);
 
-  const [toast, setToast] = useState("");
+  const [toast, setToast] =
+    useState("");
+
+  // =========================================================
+  // INTERIOR / EXTERIOR CATEGORIES
+  // =========================================================
+
+  const interiorRooms = [
+    "Living Room",
+    "Bedroom",
+    "Kitchen",
+    "Dining Room",
+    "Office",
+    "Bathroom",
+    "Hallway",
+    "Other",
+  ];
+
+  const exteriorSpaces = [
+    "House Exterior",
+    "Front Yard",
+    "Backyard",
+    "Garden",
+    "Patio",
+    "Terrace",
+    "Balcony",
+    "Pool Area",
+    "Driveway",
+    "Outdoor Living",
+    "Commercial Exterior",
+  ];
+
+  // =========================================================
+  // STYLES
+  // =========================================================
+
+  const interiorStyles = styles;
+
+  const availableSpaces =
+    spaceType === "interior"
+      ? interiorRooms
+      : exteriorSpaces;
+
+  const availableStyles =
+    spaceType === "interior"
+      ? interiorStyles
+      : exteriorStyles;
 
   // =========================================================
   // HELPERS
@@ -88,16 +254,44 @@ export default function Home() {
     }, 3000);
   }
 
-  function isUnlimited() {
-    return currentPlan === "unlimited";
-  }
-
-  function isStyleUnlocked(index: number) {
-    if (currentPlan === "unlimited") {
+  function isStyleUnlocked(
+    index: number
+  ) {
+    if (isAdminUser) {
       return true;
     }
 
-    return index < currentLimits.designs;
+    return (
+      index < currentLimits.designs
+    );
+  }
+
+  // =========================================================
+  // SPACE TYPE
+  // =========================================================
+
+  function changeSpaceType(
+    type: "interior" | "exterior"
+  ) {
+    setSpaceType(type);
+
+    if (type === "interior") {
+      setRoom("Living Room");
+
+      setSelected(
+        interiorStyles[0]?.id ??
+          "modern"
+      );
+    } else {
+      setRoom("House Exterior");
+
+      setSelected(
+        exteriorStyles[0]?.id ??
+          "exterior-modern"
+      );
+    }
+
+    setResults([]);
   }
 
   // =========================================================
@@ -110,21 +304,28 @@ export default function Home() {
     }
 
     if (!nextFile.type.startsWith("image/")) {
-      notify("Please upload an image file.");
+      notify(
+        "Please upload an image file."
+      );
       return;
     }
 
-    if (nextFile.size > 10 * 1024 * 1024) {
-      notify("Image must be smaller than 10 MB.");
+    if (
+      nextFile.size >
+      10 * 1024 * 1024
+    ) {
+      notify(
+        "Image must be smaller than 10 MB."
+      );
       return;
     }
 
     setFile(nextFile);
 
-    const objectUrl = URL.createObjectURL(nextFile);
+    const objectUrl =
+      URL.createObjectURL(nextFile);
 
     setPreview(objectUrl);
-
     setResults([]);
   }
 
@@ -133,19 +334,70 @@ export default function Home() {
   // =========================================================
 
   async function generate() {
-    if (!file) {
-      notify("Please upload a room image first.");
+    if (!isLoaded) {
       return;
     }
 
-    if (!isUnlimited() && remaining <= 0) {
-      if (currentPlan === "free") {
-        notify(
-          "You've used all 5 free generations. Upgrade to Pro to continue."
-        );
-      } else {
-        notify("You've used all 100 monthly generations.");
-      }
+    // -------------------------------------------------------
+    // USER MUST BE LOGGED IN
+    // -------------------------------------------------------
+
+    if (!isSignedIn) {
+      notify(
+        `Please sign in to generate your ${
+          spaceType === "interior"
+            ? "room"
+            : "exterior"
+        } redesign.`
+      );
+
+      window.setTimeout(() => {
+        window.location.href =
+          "/sign-in";
+      }, 500);
+
+      return;
+    }
+
+    // -------------------------------------------------------
+    // WAIT FOR DATABASE USAGE
+    // -------------------------------------------------------
+
+    if (!usageLoaded) {
+      notify(
+        "Loading your account..."
+      );
+      return;
+    }
+
+    // -------------------------------------------------------
+    // IMAGE REQUIRED
+    // -------------------------------------------------------
+
+    if (!file) {
+      notify(
+        `Please upload ${
+          spaceType === "interior"
+            ? "a room"
+            : "an exterior"
+        } image first.`
+      );
+
+      return;
+    }
+
+    // -------------------------------------------------------
+    // GENERATION LIMIT
+    // -------------------------------------------------------
+
+    if (
+      !isAdminUser &&
+      remaining !== null &&
+      remaining <= 0
+    ) {
+      notify(
+        `You've used all ${currentLimits.generations} generations available on your ${currentPlan} plan.`
+      );
 
       return;
     }
@@ -154,41 +406,126 @@ export default function Home() {
     setResults([]);
 
     try {
-      const formData = new FormData();
+      const formData =
+        new FormData();
 
-      formData.append("image", file);
-      formData.append("style", selected);
-      formData.append("room", room);
-      formData.append("preserve", preserve);
-      formData.append("creativity", creativity);
-      formData.append("additionalPrompt", additionalPrompt);
+      formData.append(
+        "image",
+        file
+      );
 
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        body: formData,
-      });
+      formData.append(
+        "type",
+        spaceType
+      );
 
-      const data = await response.json();
+      formData.append(
+        "style",
+        selected
+      );
+
+      formData.append(
+        "room",
+        room
+      );
+
+      formData.append(
+        "preserve",
+        preserve
+      );
+
+      formData.append(
+        "creativity",
+        creativity
+      );
+
+      formData.append(
+        "additionalPrompt",
+        additionalPrompt
+      );
+
+      const response =
+        await fetch(
+          "/api/generate",
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data?.error || "Failed to generate the redesign."
+          data?.error ||
+            "Failed to generate the redesign."
         );
       }
 
-      if (!Array.isArray(data.images)) {
-        throw new Error("No generated images were returned.");
+      if (
+        !Array.isArray(
+          data.images
+        )
+      ) {
+        throw new Error(
+          "No generated images were returned."
+        );
       }
 
       setResults(data.images);
 
-      if (!isUnlimited()) {
-        setRemaining((value) => Math.max(0, value - 1));
+      // -------------------------------------------------------
+      // UPDATE PLAN
+      // -------------------------------------------------------
+
+      if (
+        data.plan === "free" ||
+        data.plan === "basic" ||
+        data.plan === "pro"
+      ) {
+        setCurrentPlan(
+          data.plan
+        );
       }
+
+      // -------------------------------------------------------
+      // UPDATE ADMIN STATUS
+      // -------------------------------------------------------
+
+      setIsAdminUser(
+        Boolean(data.isAdmin)
+      );
+
+      // -------------------------------------------------------
+      // UPDATE REMAINING GENERATIONS
+      // -------------------------------------------------------
+
+      if (
+        data.remaining === null
+      ) {
+        setRemaining(null);
+      } else if (
+        typeof data.remaining ===
+        "number"
+      ) {
+        setRemaining(
+          Math.max(
+            data.remaining,
+            0
+          )
+        );
+      }
+
+      // -------------------------------------------------------
+      // SCROLL TO RESULTS
+      // -------------------------------------------------------
 
       window.setTimeout(() => {
         document
-          .getElementById("results")
+          .getElementById(
+            "results"
+          )
           ?.scrollIntoView({
             behavior: "smooth",
             block: "start",
@@ -216,32 +553,47 @@ export default function Home() {
     index: number
   ) {
     try {
-      const response = await fetch(imageUrl);
+      const response =
+        await fetch(imageUrl);
 
       if (!response.ok) {
-        throw new Error("Download failed.");
+        throw new Error(
+          "Download failed."
+        );
       }
 
-      const blob = await response.blob();
+      const blob =
+        await response.blob();
 
-      const url = URL.createObjectURL(blob);
+      const url =
+        URL.createObjectURL(
+          blob
+        );
 
-      const anchor = document.createElement("a");
+      const anchor =
+        document.createElement(
+          "a"
+        );
 
       anchor.href = url;
-      anchor.download = `roomly-redesign-${index + 1}.jpg`;
 
-      document.body.appendChild(anchor);
+      anchor.download =
+        `roomly-redesign-${index + 1}.jpg`;
+
+      document.body.appendChild(
+        anchor
+      );
 
       anchor.click();
-
       anchor.remove();
 
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error(error);
 
-      notify("Unable to download this image.");
+      notify(
+        "Unable to download this image."
+      );
     }
   }
 
@@ -251,11 +603,21 @@ export default function Home() {
 
   function scrollToGenerator() {
     document
-      .getElementById("generator")
+      .getElementById(
+        "generator"
+      )
       ?.scrollIntoView({
         behavior: "smooth",
       });
   }
+
+  // =========================================================
+  // PLAN LABEL
+  // =========================================================
+
+  const planLabel =
+    currentPlan.charAt(0).toUpperCase() +
+    currentPlan.slice(1);
 
   // =========================================================
   // RENDER
@@ -263,19 +625,13 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-white text-zinc-900">
-      {/* =====================================================
-          TOAST
-      ====================================================== */}
-
       {toast && (
         <div className="fixed right-5 top-5 z-50 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-medium text-white shadow-xl">
           {toast}
         </div>
       )}
 
-      {/* =====================================================
-          HEADER
-      ====================================================== */}
+      {/* HEADER */}
 
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
@@ -290,7 +646,9 @@ export default function Home() {
             className="flex items-center gap-2"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white">
-              <WandSparkles size={17} />
+              <WandSparkles
+                size={17}
+              />
             </div>
 
             <span className="text-lg font-bold tracking-tight">
@@ -303,9 +661,12 @@ export default function Home() {
               type="button"
               onClick={() =>
                 document
-                  .getElementById("pricing")
+                  .getElementById(
+                    "pricing"
+                  )
                   ?.scrollIntoView({
-                    behavior: "smooth",
+                    behavior:
+                      "smooth",
                   })
               }
               className="hidden rounded-lg px-4 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900 sm:block"
@@ -315,59 +676,69 @@ export default function Home() {
 
             <button
               type="button"
-              onClick={scrollToGenerator}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800"
+              onClick={
+                scrollToGenerator
+              }
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold !text-white transition hover:bg-zinc-800 lg:text-base"
             >
               Try Roomly
             </button>
+
+            <AuthButton />
           </nav>
         </div>
       </header>
 
-      {/* =====================================================
-          HERO
-      ====================================================== */}
+      {/* HERO */}
 
       <section className="border-b border-zinc-200">
         <div className="mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-28">
           <div className="mx-auto max-w-3xl text-center">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-4 py-2 text-xs font-semibold text-zinc-700">
-              <Sparkles size={14} />
-              AI Interior Redesign
+              <Sparkles
+                size={14}
+              />
+              AI Interior & Exterior
+              Redesign
             </div>
 
             <h1 className="text-5xl font-bold tracking-tight text-zinc-950 sm:text-6xl lg:text-7xl">
-              Redesign your room with AI.
+              Redesign your space
+              with AI.
             </h1>
 
             <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-zinc-600 sm:text-lg">
-              Upload a photo of your room and transform it into a
-              beautiful new interior in seconds.
+              Upload a photo of
+              your space and
+              transform it into a
+              beautiful new design
+              in seconds.
             </p>
 
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={scrollToGenerator}
+                onClick={
+                  scrollToGenerator
+                }
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800"
               >
-                <WandSparkles size={17} />
+                <WandSparkles
+                  size={17}
+                />
                 Start designing
               </button>
 
               <div className="rounded-xl border border-zinc-200 bg-white px-5 py-3.5 text-sm text-zinc-600">
-                {isUnlimited()
-                  ? "Unlimited generations"
-                  : `${remaining} generations remaining`}
+                Free plan · 5
+                generations
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* =====================================================
-          GENERATOR
-      ====================================================== */}
+      {/* GENERATOR */}
 
       <section
         id="generator"
@@ -380,29 +751,41 @@ export default function Home() {
             </p>
 
             <h2 className="mt-2 text-3xl font-bold tracking-tight">
-              Create your new room
+              {spaceType ===
+              "interior"
+                ? "Create your new room"
+                : "Create your new exterior"}
             </h2>
 
             <p className="mt-2 max-w-2xl text-zinc-600">
-              Upload your room, choose a style and let Roomly AI
+              Upload your{" "}
+              {spaceType ===
+              "interior"
+                ? "room"
+                : "exterior space"}
+              , choose a style
+              and let Roomly AI
               redesign it for you.
             </p>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-[1.1fr_50%]">
-            {/* =================================================
-                UPLOAD
-            ================================================== */}
+            {/* UPLOAD */}
 
-            <div className="lg:sticky lg:top-24 h-fit rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="h-fit rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">
-                    Your room
+                    Your{" "}
+                    {spaceType ===
+                    "interior"
+                      ? "room"
+                      : "exterior"}
                   </h3>
 
                   <p className="mt-1 text-xs text-zinc-500">
-                    JPG, PNG or WEBP · max 10 MB
+                    JPG, PNG or WEBP ·
+                    max 10 MB
                   </p>
                 </div>
 
@@ -418,15 +801,21 @@ export default function Home() {
                 accept="image/*"
                 className="hidden"
                 onChange={(event) => {
-                  onFile(event.target.files?.[0]);
+                  onFile(
+                    event.currentTarget
+                      .files?.[0]
+                  );
 
-                  event.currentTarget.value = "";
+                  event.currentTarget.value =
+                    "";
                 }}
               />
 
               <button
                 type="button"
-                onClick={() => inputRef.current?.click()}
+                onClick={() =>
+                  inputRef.current?.click()
+                }
                 className={`group relative flex min-h-[420px] w-full overflow-hidden rounded-xl border-2 border-dashed transition ${
                   preview
                     ? "border-zinc-300 bg-zinc-50"
@@ -437,7 +826,12 @@ export default function Home() {
                   <>
                     <img
                       src={preview}
-                      alt="Uploaded room"
+                      alt={
+                        spaceType ===
+                        "interior"
+                          ? "Uploaded room"
+                          : "Uploaded exterior"
+                      }
                       className="absolute inset-0 h-full w-full object-cover"
                     />
 
@@ -449,7 +843,8 @@ export default function Home() {
                           </p>
 
                           <p className="mt-1 text-xs text-white/75">
-                            Click to replace image
+                            Click to
+                            replace image
                           </p>
                         </div>
 
@@ -470,12 +865,23 @@ export default function Home() {
                     </div>
 
                     <p className="mt-5 font-semibold">
-                      Upload a room photo
+                      Upload a{" "}
+                      {spaceType ===
+                      "interior"
+                        ? "room"
+                        : "exterior"}{" "}
+                      photo
                     </p>
 
                     <p className="mt-2 text-sm leading-6 text-zinc-500">
-                      Choose a clear photo of your room to get
-                      the best AI redesign.
+                      Choose a clear
+                      photo of your{" "}
+                      {spaceType ===
+                      "interior"
+                        ? "room"
+                        : "exterior space"}{" "}
+                      to get the best
+                      AI redesign.
                     </p>
 
                     <span className="mt-5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white">
@@ -486,9 +892,7 @@ export default function Home() {
               </button>
             </div>
 
-            {/* =================================================
-                SETTINGS
-            ================================================== */}
+            {/* SETTINGS */}
 
             <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
               <div className="mb-6">
@@ -497,11 +901,57 @@ export default function Home() {
                 </h3>
 
                 <p className="mt-1 text-xs text-zinc-500">
-                  Customize your AI redesign.
+                  Customize your AI
+                  redesign.
                 </p>
               </div>
 
               <div className="space-y-6">
+                {/* SPACE TYPE */}
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    What do you want
+                    to redesign?
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-zinc-100 p-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        changeSpaceType(
+                          "interior"
+                        )
+                      }
+                      className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+                        spaceType ===
+                        "interior"
+                          ? "bg-white text-zinc-900 shadow-sm"
+                          : "text-zinc-500 hover:text-zinc-900"
+                      }`}
+                    >
+                      Interior
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        changeSpaceType(
+                          "exterior"
+                        )
+                      }
+                      className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+                        spaceType ===
+                        "exterior"
+                          ? "bg-white text-zinc-900 shadow-sm"
+                          : "text-zinc-500 hover:text-zinc-900"
+                      }`}
+                    >
+                      Exterior
+                    </button>
+                  </div>
+                </div>
+
                 {/* ROOM */}
 
                 <div>
@@ -509,7 +959,10 @@ export default function Home() {
                     htmlFor="room"
                     className="mb-2 block text-sm font-semibold"
                   >
-                    Room
+                    {spaceType ===
+                    "interior"
+                      ? "Room"
+                      : "Exterior space"}
                   </label>
 
                   <div className="relative">
@@ -517,18 +970,23 @@ export default function Home() {
                       id="room"
                       value={room}
                       onChange={(event) =>
-                        setRoom(event.target.value)
+                        setRoom(
+                          event.target
+                            .value
+                        )
                       }
-                      className="w-full appearance-none rounded-xl outline-none border border-zinc-200 bg-white px-4 py-3 pr-10 text-sm"
+                      className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 pr-10 text-sm outline-none"
                     >
-                      <option>Living Room</option>
-                      <option>Bedroom</option>
-                      <option>Kitchen</option>
-                      <option>Dining Room</option>
-                      <option>Office</option>
-                      <option>Bathroom</option>
-                      <option>Hallway</option>
-                      <option>Other</option>
+                      {availableSpaces.map(
+                        (space) => (
+                          <option
+                            key={space}
+                            value={space}
+                          >
+                            {space}
+                          </option>
+                        )
+                      )}
                     </select>
 
                     <ChevronDown
@@ -543,76 +1001,102 @@ export default function Home() {
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <label className="block text-sm font-semibold">
-                      Design style
+                      {spaceType ===
+                      "interior"
+                        ? "Interior style"
+                        : "Architectural style"}
                     </label>
 
                     <span className="text-xs text-zinc-500">
-                      {currentPlan === "free"
-                        ? "3 styles included"
-                        : currentPlan === "pro"
-                          ? "10 styles included"
-                          : "All styles unlocked"}
+                      {isAdminUser
+                        ? "All styles unlocked"
+                        : `${currentLimits.designs} styles included`}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4` lg:grid-cols-3 gap-3">
-                    {styles.map((style, index) => {
-                      const unlocked =
-                        isStyleUnlocked(index);
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-3">
+                    {availableStyles.map(
+                      (
+                        style,
+                        index
+                      ) => {
+                        const unlocked =
+                          isStyleUnlocked(
+                            index
+                          );
 
-                      return (
-                        <button
-                          key={style.id}
-                          type="button"
-                          disabled={!unlocked}
-                          onClick={() => {
-                            if (!unlocked) {
-                              notify(
-                                currentPlan === "free"
-                                  ? "This design is available on Pro."
-                                  : "Upgrade your plan to unlock this design."
-                              );
-
-                              return;
+                        return (
+                          <button
+                            key={
+                              style.id
                             }
+                            type="button"
+                            disabled={
+                              !unlocked
+                            }
+                            onClick={() => {
+                              if (
+                                !unlocked
+                              ) {
+                                notify(
+                                  `This design is not available on your ${currentPlan} plan.`
+                                );
 
-                            setSelected(style.id);
-                          }}
-                          className={`group overflow-hidden rounded-xl border text-left transition ${
-                            selected === style.id
-                              ? "border-zinc-900 ring-2 ring-zinc-900"
-                              : unlocked
-                                ? "border-zinc-200 hover:border-zinc-400"
-                                : "cursor-not-allowed border-zinc-200 opacity-60"
-                          }`}
-                        >
-                          <div className="relative h-20 overflow-hidden">
-                            <img
-                              src={style.image}
-                              alt={style.name}
-                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                            />
+                                return;
+                              }
 
-                            {!unlocked && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-white">
-                                <Lock size={16} />
-                              </div>
-                            )}
-                          </div>
+                              setSelected(
+                                style.id
+                              );
+                            }}
+                            className={`group overflow-hidden rounded-xl border text-left transition ${
+                              selected ===
+                              style.id
+                                ? "border-zinc-900 ring-2 ring-zinc-900"
+                                : unlocked
+                                  ? "border-zinc-200 hover:border-zinc-400"
+                                  : "cursor-not-allowed border-zinc-200 opacity-60"
+                            }`}
+                          >
+                            <div className="relative h-20 overflow-hidden">
+                              <img
+                                src={
+                                  style.image
+                                }
+                                alt={
+                                  style.name
+                                }
+                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                              />
 
-                          <div className="flex items-center justify-between px-3 py-2.5">
-                            <span className="text-xs font-semibold">
-                              {style.name}
-                            </span>
-
-                            {selected === style.id &&
-                              unlocked && (
-                                <span className="h-2 w-2 rounded-full bg-zinc-900" />
+                              {!unlocked && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-white">
+                                  <Lock
+                                    size={
+                                      16
+                                    }
+                                  />
+                                </div>
                               )}
-                          </div>
-                        </button>
-                      );
-                    })}
+                            </div>
+
+                            <div className="flex items-center justify-between px-3 py-2.5">
+                              <span className="text-xs font-semibold">
+                                {
+                                  style.name
+                                }
+                              </span>
+
+                              {selected ===
+                                style.id &&
+                                unlocked && (
+                                  <span className="h-2 w-2 rounded-full bg-zinc-900" />
+                                )}
+                            </div>
+                          </button>
+                        );
+                      }
+                    )}
                   </div>
                 </div>
 
@@ -623,7 +1107,12 @@ export default function Home() {
                     htmlFor="preserve"
                     className="mb-2 block text-sm font-semibold"
                   >
-                    Keep room structure
+                    Keep{" "}
+                    {spaceType ===
+                    "interior"
+                      ? "room"
+                      : "space"}{" "}
+                    structure
                   </label>
 
                   <div className="relative">
@@ -631,18 +1120,29 @@ export default function Home() {
                       id="preserve"
                       value={preserve}
                       onChange={(event) =>
-                        setPreserve(event.target.value)
+                        setPreserve(
+                          event.target
+                            .value
+                        )
                       }
-                      className="w-full appearance-none rounded-xl outline-none border border-zinc-200 bg-white px-4 py-3 pr-10 text-sm"
+                      className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 pr-10 text-sm outline-none"
                     >
                       <option>
-                        Layout + windows + doors
+                        Layout + windows +
+                        doors
                       </option>
+
                       <option>
                         Layout + windows
                       </option>
-                      <option>Windows + doors</option>
-                      <option>Nothing</option>
+
+                      <option>
+                        Windows + doors
+                      </option>
+
+                      <option>
+                        Nothing
+                      </option>
                     </select>
 
                     <ChevronDown
@@ -653,6 +1153,7 @@ export default function Home() {
                 </div>
 
                 {/* CREATIVITY */}
+
                 <div>
                   <label
                     htmlFor="creativity"
@@ -666,30 +1167,43 @@ export default function Home() {
                       id="creativity"
                       value={creativity}
                       onChange={(event) =>
-                        setCreativity(event.target.value)
+                        setCreativity(
+                          event.target
+                            .value
+                        )
                       }
-                      className="w-full appearance-none rounded-xl outline-none border border-zinc-200 bg-white px-4 py-3 pr-10 text-sm"
+                      className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 pr-10 text-sm outline-none"
                     >
-                      <option>Conservative</option>
-                      <option>Balanced</option>
-                      <option>Creative</option>
+                      <option>
+                        Conservative
+                      </option>
+
+                      <option>
+                        Balanced
+                      </option>
+
+                      <option>
+                        Creative
+                      </option>
                     </select>
+
                     <ChevronDown
                       size={18}
                       className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
                     />
                   </div>
-
                 </div>
-                
+
                 {/* ADDITIONAL INSTRUCTIONS */}
+
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <label
                       htmlFor="additionalPrompt"
                       className="block text-sm font-semibold"
                     >
-                      Additional instructions
+                      Additional
+                      instructions
                     </label>
 
                     <span className="text-xs text-zinc-400">
@@ -699,11 +1213,21 @@ export default function Home() {
 
                   <textarea
                     id="additionalPrompt"
-                    value={additionalPrompt}
-                    onChange={(event) =>
-                      setAdditionalPrompt(event.target.value)
+                    value={
+                      additionalPrompt
                     }
-                    placeholder="e.g. Add a 30-inch TV, put a bookshelf to the right of the TV, and add a TV console with a hi-fi system."
+                    onChange={(event) =>
+                      setAdditionalPrompt(
+                        event.target
+                          .value
+                      )
+                    }
+                    placeholder={
+                      spaceType ===
+                      "interior"
+                        ? "e.g. Add a 30-inch TV, put a bookshelf to the right of the TV, and add a TV console with a hi-fi system."
+                        : "e.g. Add outdoor furniture, modern landscaping, warm exterior lighting, and a stone pathway."
+                    }
                     rows={4}
                     maxLength={500}
                     className="w-full resize-none rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm leading-6 outline-none transition placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/5"
@@ -711,11 +1235,16 @@ export default function Home() {
 
                   <div className="mt-1 flex justify-between text-xs text-zinc-400">
                     <span>
-                      Tell AI exactly what you want to add or change.
+                      Tell AI exactly
+                      what you want to
+                      add or change.
                     </span>
 
                     <span>
-                      {additionalPrompt.length}/500
+                      {
+                        additionalPrompt.length
+                      }
+                      /500
                     </span>
                   </div>
                 </div>
@@ -729,29 +1258,41 @@ export default function Home() {
                     disabled={
                       generating ||
                       !file ||
-                      (!isUnlimited() && remaining <= 0)
+                      (isSignedIn &&
+                        (!usageLoaded ||
+                          (!isAdminUser &&
+                            remaining !==
+                              null &&
+                            remaining <=
+                              0)))
                     }
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {generating ? (
                       <>
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+
                         Generating...
                       </>
                     ) : (
                       <>
-                        <Sparkles size={17} />
+                        <Sparkles
+                          size={17}
+                        />
+
                         Generate redesign
                       </>
                     )}
                   </button>
 
                   <p className="mt-3 text-center text-xs text-zinc-500">
-                    {isUnlimited()
-                      ? "Unlimited generations"
-                      : `${remaining} generation${
-                          remaining === 1 ? "" : "s"
-                        } remaining`}
+                    {!isSignedIn
+                      ? "Sign in required to generate"
+                      : !usageLoaded
+                        ? "Loading account..."
+                        : isAdminUser
+                          ? "Admin · Unlimited generations · All styles"
+                          : `${planLabel} plan · ${remaining ?? 0} generations remaining`}
                   </p>
                 </div>
               </div>
@@ -760,9 +1301,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* =====================================================
-          RESULTS
-      ====================================================== */}
+      {/* RESULTS */}
 
       <section
         id="results"
@@ -775,11 +1314,20 @@ export default function Home() {
             </p>
 
             <h2 className="mt-2 text-3xl font-bold tracking-tight">
-              Your redesigned room
+              Your redesigned{" "}
+              {spaceType ===
+              "interior"
+                ? "room"
+                : "space"}
             </h2>
 
             <p className="mt-2 text-zinc-600">
-              Your AI-generated interior designs will appear
+              Your AI-generated{" "}
+              {spaceType ===
+              "interior"
+                ? "interior"
+                : "exterior"}{" "}
+              designs will appear
               here.
             </p>
           </div>
@@ -795,15 +1343,22 @@ export default function Home() {
                 </div>
 
                 <h3 className="mt-5 font-semibold">
-                  Redesigning your room...
+                  Redesigning your{" "}
+                  {spaceType ===
+                  "interior"
+                    ? "room"
+                    : "space"}
+                  ...
                 </h3>
 
                 <p className="mt-2 text-sm text-zinc-500">
-                  This can take a little while.
+                  This can take a
+                  little while.
                 </p>
               </div>
             </div>
-          ) : results.length === 0 ? (
+          ) : results.length ===
+            0 ? (
             <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50">
               <div className="max-w-md text-center">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
@@ -818,13 +1373,21 @@ export default function Home() {
                 </h3>
 
                 <p className="mt-2 text-sm leading-6 text-zinc-500">
-                  Upload a room photo and generate your first
-                  AI redesign.
+                  Upload a{" "}
+                  {spaceType ===
+                  "interior"
+                    ? "room"
+                    : "exterior"}{" "}
+                  photo and generate
+                  your first AI
+                  redesign.
                 </p>
 
                 <button
                   type="button"
-                  onClick={scrollToGenerator}
+                  onClick={
+                    scrollToGenerator
+                  }
                   className="mt-5 rounded-xl bg-zinc-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
                 >
                   Start designing
@@ -833,68 +1396,101 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {results.map((image, index) => (
-                <div
-                  key={`${image}-${index}`}
-                  className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
-                >
-                  <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
-                    <img
-                      src={image}
-                      alt={`AI redesigned room ${
-                        index + 1
-                      }`}
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                    />
+              {results.map(
+                (
+                  image,
+                  index
+                ) => (
+                  <div
+                    key={`${image}-${index}`}
+                    className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm"
+                  >
+                    <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
+                      <img
+                        src={image}
+                        alt={`AI redesigned ${
+                          spaceType ===
+                          "interior"
+                            ? "room"
+                            : "exterior"
+                        } ${index + 1}`}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        downloadImage(image, index)
-                      }
-                      className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/95 text-zinc-900 opacity-0 shadow-lg transition group-hover:opacity-100"
-                      aria-label={`Download redesign ${
-                        index + 1
-                      }`}
-                    >
-                      <Download size={17} />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {styles.find(
-                          (style) => style.id === selected
-                        )?.name ?? "AI Redesign"}
-                      </p>
-
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {room}
-                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadImage(
+                            image,
+                            index
+                          )
+                        }
+                        className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/95 text-zinc-900 opacity-0 shadow-lg transition group-hover:opacity-100"
+                        aria-label={`Download redesign ${
+                          index + 1
+                        }`}
+                      >
+                        <Download
+                          size={17}
+                        />
+                      </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        downloadImage(image, index)
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold transition hover:bg-zinc-50"
-                    >
-                      <Download size={14} />
-                      Download
-                    </button>
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {spaceType ===
+                          "interior"
+                            ? styles.find(
+                                (
+                                  style
+                                ) =>
+                                  style.id ===
+                                  selected
+                              )
+                                ?.name ??
+                              "AI Redesign"
+                            : exteriorStyles.find(
+                                (
+                                  style
+                                ) =>
+                                  style.id ===
+                                  selected
+                              )
+                                ?.name ??
+                              "AI Redesign"}
+                        </p>
+
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {room}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadImage(
+                            image,
+                            index
+                          )
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold transition hover:bg-zinc-50"
+                      >
+                        <Download
+                          size={14}
+                        />
+                        Download
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
       </section>
 
-      {/* =====================================================
-          PRICING
-      ====================================================== */}
+      {/* PRICING */}
 
       <section
         id="pricing"
@@ -911,22 +1507,24 @@ export default function Home() {
             </h2>
 
             <p className="mt-3 text-zinc-600">
-              Start for free and upgrade when you need more
-              designs.
+              Start for free and
+              upgrade when you need
+              more designs.
             </p>
           </div>
 
           <div className="mt-12 grid gap-5 lg:grid-cols-3">
-            {/* =================================================
-                FREE
-            ================================================== */}
+            {/* FREE */}
 
             <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
               <div>
-                <h3 className="text-xl font-bold">Free</h3>
+                <h3 className="text-xl font-bold">
+                  Free
+                </h3>
 
                 <p className="mt-2 text-sm text-zinc-500">
-                  Try Roomly AI for free.
+                  Try Roomly AI for
+                  free.
                 </p>
               </div>
 
@@ -942,24 +1540,93 @@ export default function Home() {
               </div>
 
               <ul className="mt-6 space-y-3 text-sm text-zinc-600">
-                <li>✓ 5 AI room redesigns</li>
-                <li>✓ 3 design styles</li>
-                <li>✓ Standard image quality</li>
-                <li>✓ Basic interior styles</li>
+                <li>
+                  ✓ 5 AI room
+                  redesigns
+                </li>
+
+                <li>
+                  ✓ 3 design styles
+                </li>
+
+                <li>
+                  ✓ Standard image
+                  quality
+                </li>
+
+                <li>
+                  ✓ Basic interior
+                  styles
+                </li>
               </ul>
 
               <button
                 type="button"
-                onClick={scrollToGenerator}
+                onClick={
+                  scrollToGenerator
+                }
                 className="mt-8 w-full rounded-xl border border-zinc-300 px-5 py-3 text-sm font-semibold transition hover:bg-zinc-50"
               >
-                Current plan
+                Start designing
               </button>
             </div>
 
-            {/* =================================================
-                PRO
-            ================================================== */}
+            {/* BASIC */}
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+              <div>
+                <h3 className="text-xl font-bold">
+                  Basic
+                </h3>
+
+                <p className="mt-2 text-sm text-zinc-500">
+                  For more frequent
+                  redesigns.
+                </p>
+              </div>
+
+              <div className="mt-6">
+                <span className="text-4xl font-bold">
+                  €4.99
+                </span>
+
+                <span className="text-sm text-zinc-500">
+                  {" "}
+                  / month
+                </span>
+              </div>
+
+              <ul className="mt-6 space-y-3 text-sm text-zinc-600">
+                <li>
+                  ✓ 50 AI room
+                  redesigns / month
+                </li>
+
+                <li>
+                  ✓ 10 design styles
+                </li>
+
+                <li>
+                  ✓ High-quality image
+                  generation
+                </li>
+
+                <li>
+                  ✓ More interior
+                  styles
+                </li>
+              </ul>
+
+              <button
+                type="button"
+                disabled
+                className="mt-8 w-full cursor-not-allowed rounded-xl bg-zinc-900 px-5 py-3 text-sm font-semibold text-white opacity-50"
+              >
+                Payments coming soon
+              </button>
+            </div>
+
+            {/* PRO */}
 
             <div className="relative rounded-2xl border-2 border-zinc-900 bg-white p-6 shadow-sm">
               <div className="absolute right-5 top-5 rounded-full bg-zinc-900 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
@@ -967,10 +1634,13 @@ export default function Home() {
               </div>
 
               <div>
-                <h3 className="text-xl font-bold">Pro</h3>
+                <h3 className="text-xl font-bold">
+                  Pro
+                </h3>
 
                 <p className="mt-2 text-sm text-zinc-500">
-                  For regular room redesigns.
+                  For serious AI design
+                  projects.
                 </p>
               </div>
 
@@ -986,10 +1656,24 @@ export default function Home() {
               </div>
 
               <ul className="mt-6 space-y-3 text-sm text-zinc-600">
-                <li>✓ 100 AI room redesigns / month</li>
-                <li>✓ 10 design styles</li>
-                <li>✓ High-quality image generation</li>
-                <li>✓ More interior styles</li>
+                <li>
+                  ✓ 200 AI room
+                  redesigns / month
+                </li>
+
+                <li>
+                  ✓ 20 design styles
+                </li>
+
+                <li>
+                  ✓ High-quality image
+                  generation
+                </li>
+
+                <li>
+                  ✓ All interior &
+                  exterior styles
+                </li>
               </ul>
 
               <button
@@ -1000,64 +1684,22 @@ export default function Home() {
                 Payments coming soon
               </button>
             </div>
-
-            {/* =================================================
-                UNLIMITED
-            ================================================== */}
-
-            <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <div>
-                <h3 className="text-xl font-bold">
-                  Unlimited
-                </h3>
-
-                <p className="mt-2 text-sm text-zinc-500">
-                  For unlimited creative projects.
-                </p>
-              </div>
-
-              <div className="mt-6">
-                <span className="text-4xl font-bold">
-                  €79.99
-                </span>
-
-                <span className="text-sm text-zinc-500">
-                  {" "}
-                  / year
-                </span>
-              </div>
-
-              <ul className="mt-6 space-y-3 text-sm text-zinc-600">
-                <li>✓ Unlimited AI room redesigns / year</li>
-                <li>✓ All design styles</li>
-                <li>✓ High-quality image generation</li>
-                <li>✓ All interior styles</li>
-              </ul>
-
-              <button
-                type="button"
-                disabled
-                className="mt-8 w-full cursor-not-allowed rounded-xl border border-zinc-300 px-5 py-3 text-sm font-semibold opacity-50"
-              >
-                Payments coming soon
-              </button>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* =====================================================
-          FOOTER
-      ====================================================== */}
+      {/* FOOTER */}
 
       <footer>
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-5 py-8 text-sm text-zinc-500 sm:flex-row lg:px-8">
           <p>
-            © {new Date().getFullYear()} Roomly AI
+            © {new Date().getFullYear()}{" "}
+            Roomly AI
           </p>
 
           <p>
-            AI-powered interior redesign.
+            AI-powered interior &
+            exterior redesign.
           </p>
         </div>
       </footer>
