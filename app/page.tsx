@@ -92,8 +92,29 @@ export default function Home() {
           }
         );
 
-        const data =
-          await response.json();
+        const contentType =
+          response.headers.get(
+            "content-type"
+          ) || "";
+
+        let data: any = null;
+
+        if (
+          contentType.includes(
+            "application/json"
+          )
+        ) {
+          data = await response.json();
+        } else {
+          const text =
+            await response.text();
+
+          data = {
+            error:
+              text ||
+              `Request failed with status ${response.status}.`,
+          };
+        }
 
         if (!response.ok) {
           throw new Error(
@@ -120,7 +141,8 @@ export default function Home() {
 
         if (
           data.remaining === null ||
-          typeof data.remaining === "undefined"
+          typeof data.remaining ===
+            "undefined"
         ) {
           setRemaining(null);
         } else {
@@ -267,6 +289,234 @@ export default function Home() {
   }
 
   // =========================================================
+  // IMAGE COMPRESSION
+  // =========================================================
+
+  async function compressImage(
+    originalFile: File
+  ): Promise<File> {
+    const MAX_DIMENSION = 1536;
+    const TARGET_SIZE = 1 * 1024 * 1024;
+    const MAX_QUALITY = 0.88;
+    const MIN_QUALITY = 0.55;
+
+    // -------------------------------------------------------
+    // Read image
+    // -------------------------------------------------------
+
+    const image = new Image();
+
+    const objectUrl =
+      URL.createObjectURL(
+        originalFile
+      );
+
+    try {
+      await new Promise<void>(
+        (resolve, reject) => {
+          image.onload = () =>
+            resolve();
+
+          image.onerror = () =>
+            reject(
+              new Error(
+                "Unable to read the uploaded image."
+              )
+            );
+
+          image.src = objectUrl;
+        }
+      );
+
+      // -----------------------------------------------------
+      // Calculate new dimensions
+      // -----------------------------------------------------
+
+      let width = image.naturalWidth;
+      let height = image.naturalHeight;
+
+      if (
+        width <= 0 ||
+        height <= 0
+      ) {
+        throw new Error(
+          "Invalid image dimensions."
+        );
+      }
+
+      const scale = Math.min(
+        1,
+        MAX_DIMENSION / width,
+        MAX_DIMENSION / height
+      );
+
+      width = Math.round(
+        width * scale
+      );
+
+      height = Math.round(
+        height * scale
+      );
+
+      // -----------------------------------------------------
+      // Canvas
+      // -----------------------------------------------------
+
+      const canvas =
+        document.createElement(
+          "canvas"
+        );
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const context =
+        canvas.getContext(
+          "2d"
+        );
+
+      if (!context) {
+        throw new Error(
+          "Unable to prepare image for upload."
+        );
+      }
+
+      context.imageSmoothingEnabled =
+        true;
+
+      context.imageSmoothingQuality =
+        "high";
+
+      context.drawImage(
+        image,
+        0,
+        0,
+        width,
+        height
+      );
+
+      // -----------------------------------------------------
+      // Convert to JPEG
+      // -----------------------------------------------------
+
+      async function canvasToBlob(
+        quality: number
+      ): Promise<Blob> {
+        const blob =
+          await new Promise<Blob | null>(
+            (resolve) => {
+              canvas.toBlob(
+                (result) =>
+                  resolve(result),
+                "image/jpeg",
+                quality
+              );
+            }
+          );
+
+        if (!blob) {
+          throw new Error(
+            "Unable to compress image."
+          );
+        }
+
+        return blob;
+      }
+
+      // Start with high quality.
+      let quality = MAX_QUALITY;
+
+      let blob =
+        await canvasToBlob(
+          quality
+        );
+
+      // -----------------------------------------------------
+      // Reduce quality until the image is reasonably small.
+      // -----------------------------------------------------
+
+      while (
+        blob.size > TARGET_SIZE &&
+        quality > MIN_QUALITY
+      ) {
+        quality = Math.max(
+          MIN_QUALITY,
+          quality - 0.08
+        );
+
+        blob =
+          await canvasToBlob(
+            quality
+          );
+      }
+
+      // -----------------------------------------------------
+      // If still too large, reduce dimensions.
+      // -----------------------------------------------------
+
+      if (
+        blob.size > TARGET_SIZE
+      ) {
+        const reducedScale = 0.8;
+
+        canvas.width = Math.max(
+          640,
+          Math.round(
+            width * reducedScale
+          )
+        );
+
+        canvas.height = Math.max(
+          640,
+          Math.round(
+            height * reducedScale
+          )
+        );
+
+        context.clearRect(
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+        context.drawImage(
+          image,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+        quality = 0.78;
+
+        blob =
+          await canvasToBlob(
+            quality
+          );
+      }
+
+      // -----------------------------------------------------
+      // Final File
+      // -----------------------------------------------------
+
+      return new File(
+        [blob],
+        "roomly-input.jpg",
+        {
+          type: "image/jpeg",
+          lastModified:
+            Date.now(),
+        }
+      );
+    } finally {
+      URL.revokeObjectURL(
+        objectUrl
+      );
+    }
+  }
+
+  // =========================================================
   // SPACE TYPE
   // =========================================================
 
@@ -303,7 +553,11 @@ export default function Home() {
       return;
     }
 
-    if (!nextFile.type.startsWith("image/")) {
+    if (
+      !nextFile.type.startsWith(
+        "image/"
+      )
+    ) {
       notify(
         "Please upload an image file."
       );
@@ -323,7 +577,9 @@ export default function Home() {
     setFile(nextFile);
 
     const objectUrl =
-      URL.createObjectURL(nextFile);
+      URL.createObjectURL(
+        nextFile
+      );
 
     setPreview(objectUrl);
     setResults([]);
@@ -406,12 +662,46 @@ export default function Home() {
     setResults([]);
 
     try {
+      // -----------------------------------------------------
+      // COMPRESS IMAGE BEFORE SENDING TO NETLIFY
+      // -----------------------------------------------------
+
+      notify(
+        "Preparing your image..."
+      );
+
+      const compressedFile =
+        await compressImage(file);
+
+      console.log(
+        "Roomly image compression:",
+        {
+          originalSize:
+            `${(
+              file.size /
+              1024 /
+              1024
+            ).toFixed(2)} MB`,
+
+          compressedSize:
+            `${(
+              compressedFile.size /
+              1024 /
+              1024
+            ).toFixed(2)} MB`,
+        }
+      );
+
+      // -----------------------------------------------------
+      // BUILD FORM DATA
+      // -----------------------------------------------------
+
       const formData =
         new FormData();
 
       formData.append(
         "image",
-        file
+        compressedFile
       );
 
       formData.append(
@@ -444,6 +734,10 @@ export default function Home() {
         additionalPrompt
       );
 
+      // -----------------------------------------------------
+      // SEND TO API
+      // -----------------------------------------------------
+
       const response =
         await fetch(
           "/api/generate",
@@ -453,31 +747,98 @@ export default function Home() {
           }
         );
 
-      const data =
-        await response.json();
+      // -----------------------------------------------------
+      // SAFE RESPONSE PARSING
+      // -----------------------------------------------------
+
+      const contentType =
+        response.headers.get(
+          "content-type"
+        ) || "";
+
+      let data: any = null;
+
+      if (
+        contentType.includes(
+          "application/json"
+        )
+      ) {
+        try {
+          data =
+            await response.json();
+        } catch {
+          data = null;
+        }
+      } else {
+        try {
+          const text =
+            await response.text();
+
+          data = {
+            error:
+              text ||
+              `Request failed with status ${response.status}.`,
+          };
+        } catch {
+          data = null;
+        }
+      }
+
+      // -----------------------------------------------------
+      // 413 — REQUEST TOO LARGE
+      // -----------------------------------------------------
+
+      if (
+        response.status === 413
+      ) {
+        throw new Error(
+          "The image is too large for the server. Please choose a smaller image and try again."
+        );
+      }
+
+      // -----------------------------------------------------
+      // OTHER HTTP ERRORS
+      // -----------------------------------------------------
 
       if (!response.ok) {
         throw new Error(
           data?.error ||
-            "Failed to generate the redesign."
+            `Generation failed (${response.status}). Please try again.`
+        );
+      }
+
+      // -----------------------------------------------------
+      // VALIDATE RESULT
+      // -----------------------------------------------------
+
+      if (
+        !data ||
+        !Array.isArray(
+          data.images
+        )
+      ) {
+        throw new Error(
+          "The server did not return any generated images."
         );
       }
 
       if (
-        !Array.isArray(
-          data.images
-        )
+        data.images.length === 0
       ) {
         throw new Error(
           "No generated images were returned."
         );
       }
 
+      // -----------------------------------------------------
+      // SUCCESS
+      // -----------------------------------------------------
+
       setResults(data.images);
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // UPDATE PLAN
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       if (
         data.plan === "free" ||
@@ -489,17 +850,17 @@ export default function Home() {
         );
       }
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // UPDATE ADMIN STATUS
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       setIsAdminUser(
         Boolean(data.isAdmin)
       );
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // UPDATE REMAINING GENERATIONS
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       if (
         data.remaining === null
@@ -517,9 +878,9 @@ export default function Home() {
         );
       }
 
-      // -------------------------------------------------------
+      // -----------------------------------------------------
       // SCROLL TO RESULTS
-      // -------------------------------------------------------
+      // -----------------------------------------------------
 
       window.setTimeout(() => {
         document
@@ -532,7 +893,10 @@ export default function Home() {
           });
       }, 100);
     } catch (error) {
-      console.error(error);
+      console.error(
+        "Roomly generation error:",
+        error
+      );
 
       notify(
         error instanceof Error
@@ -585,9 +949,12 @@ export default function Home() {
       );
 
       anchor.click();
+
       anchor.remove();
 
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(
+        url
+      );
     } catch (error) {
       console.error(error);
 
