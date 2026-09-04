@@ -281,16 +281,16 @@ export default function SignInPage() {
   const handleGoogleSignIn = async () => {
     setError("");
     setSuccess("");
-
+  
     try {
-      await signIn.authenticateWithRedirect({
+      await signIn.sso({
         strategy: "oauth_google",
-        redirectUrl: "/sign-in/sso-callback",
-        redirectUrlComplete: "/",
+        redirectCallbackUrl: "/sign-in/sso-callback",
+        redirectUrl: "/",
       });
     } catch (err: any) {
       console.error("GOOGLE SIGN IN ERROR:", err);
-
+  
       setError(
         getErrorMessage(
           err,
